@@ -1,0 +1,15 @@
+# Dependencias (se instalan solas en Render)
+node_modules/
+
+# Base de datos local (Render crea la suya)
+catalogo.json
+
+# Fotos subidas localmente
+uploads/
+
+# Variables de entorno con contraseñas
+.env
+
+# Logs
+*.log
+npm-debug.log*
