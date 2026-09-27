@@ -16,7 +16,11 @@ const app = express();
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
+// Servir archivos estáticos desde la raíz y desde /public
+app.use(express.static(__dirname));
 app.use(express.static(path.join(__dirname, 'public')));
+// Permitir que /css/catalogo.css se resuelva aunque el archivo esté en la raíz
+app.use('/css', express.static(__dirname));
 app.use('/uploads', express.static(uploadsDir));
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
@@ -165,11 +169,15 @@ app.delete('/api/admin/productos/:id', requireAuth, (req, res) => {
 
 // ── Fallback: páginas HTML ─────────────────────────────────────────────────────
 app.get('/admin', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+  const enPublic = path.join(__dirname, 'public', 'admin.html');
+  const enRaiz   = path.join(__dirname, 'admin.html');
+  res.sendFile(fs.existsSync(enPublic) ? enPublic : enRaiz);
 });
 
 app.get('*', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const enPublic = path.join(__dirname, 'public', 'index.html');
+  const enRaiz   = path.join(__dirname, 'index.html');
+  res.sendFile(fs.existsSync(enPublic) ? enPublic : enRaiz);
 });
 
 // ── Arrancar ───────────────────────────────────────────────────────────────────
