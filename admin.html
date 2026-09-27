@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Mariana Pasinato</title>
+  <link rel="stylesheet" href="/css/catalogo.css" />
+</head>
+<body>
+
+  <!-- ── Login overlay ────────────────────────────────────── -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>🔐 Panel de Administración</h2>
+      <p style="font-size:.85rem;color:var(--texto-cl);margin-bottom:1.5rem;">Mariana Pasinato — Artesanías</p>
+      <div class="form-group">
+        <label for="inputPassword">Contraseña</label>
+        <input type="password" id="inputPassword" placeholder="Ingresá tu contraseña" autocomplete="current-password" />
+      </div>
+      <p class="error-msg hidden" id="loginError">Contraseña incorrecta. Intentá de nuevo.</p>
+      <button class="btn btn-primary" id="btnLogin">Ingresar</button>
+    </div>
+  </div>
+
+  <!-- ── Panel principal (oculto hasta login) ─────────────── -->
+  <div id="adminPanel" class="hidden">
+
+    <!-- Header -->
+    <header class="admin-header">
+      <h1>⚙ Panel de Administración</h1>
+      <div style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;">
+        <a href="/" target="_blank" style="color:var(--arena);font-size:.82rem;text-decoration:none;">
+          👁 Ver catálogo
+        </a>
+        <button class="btn btn-logout" id="btnLogout">Cerrar sesión</button>
+      </div>
+    </header>
+
+    <!-- Contenido -->
+    <div class="admin-container">
+
+      <!-- ── Columna izquierda: Formulario ─────────────────── -->
+      <aside>
+        <div class="panel">
+          <h2 id="formTitulo">➕ Nuevo producto</h2>
+
+          <form id="formProducto" enctype="multipart/form-data" novalidate>
+            <input type="hidden" id="productoId" value="" />
+
+            <div class="form-group">
+              <label for="inputNombre">Nombre *</label>
+              <input type="text" id="inputNombre" placeholder="Ej: Almohadón bordado beige" required />
+            </div>
+
+            <div class="form-group">
+              <label for="inputCategoria">Categoría *</label>
+              <select id="inputCategoria" required>
+                <option value="">— Seleccioná —</option>
+                <option value="almohadones">🪡 Almohadones</option>
+                <option value="caminos">🌿 Caminos</option>
+                <option value="velas">🕯 Velas</option>
+                <option value="alhajeros">💎 Alhajeros</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="inputDescripcion">Descripción</label>
+              <textarea id="inputDescripcion" placeholder="Describí el producto: materiales, tamaño, colores…"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="inputPrecio">Precio ($) — dejá 0 para "Consultá precio"</label>
+              <input type="number" id="inputPrecio" min="0" step="0.01" value="0" placeholder="0" />
+            </div>
+
+            <div class="form-group">
+              <label>Foto del producto</label>
+              <input type="file" id="inputImagen" accept="image/*" style="display:none" />
+              <div class="img-preview-wrap" id="imgPreviewWrap" title="Hacé clic para elegir imagen">
+                <span id="imgPreviewTexto">📷 Hacé clic para subir foto</span>
+              </div>
+            </div>
+
+            <p class="error-msg hidden" id="formError"></p>
+
+            <button type="submit" class="btn btn-primary" id="btnGuardar">Guardar producto</button>
+            <button type="button" class="btn btn-secondary hidden" id="btnCancelarEdicion">Cancelar edición</button>
+          </form>
+        </div>
+      </aside>
+
+      <!-- ── Columna derecha: Lista de productos ───────────── -->
+      <section>
+        <div class="panel">
+          <h2>📦 Productos cargados</h2>
+
+          <!-- Filtro por categoría en admin -->
+          <div class="filtros" style="justify-content:flex-start;padding:.5rem 0 1rem;flex-wrap:wrap;gap:.4rem;">
+            <button class="filtro-btn activo" data-cat="todos" style="font-size:.75rem;padding:.35rem .9rem;">Todos</button>
+            <button class="filtro-btn" data-cat="almohadones" style="font-size:.75rem;padding:.35rem .9rem;">Almohadones</button>
+            <button class="filtro-btn" data-cat="caminos" style="font-size:.75rem;padding:.35rem .9rem;">Caminos</button>
+            <button class="filtro-btn" data-cat="velas" style="font-size:.75rem;padding:.35rem .9rem;">Velas</button>
+            <button class="filtro-btn" data-cat="alhajeros" style="font-size:.75rem;padding:.35rem .9rem;">Alhajeros</button>
+          </div>
+
+          <div id="adminLista" class="admin-lista">
+            <p style="color:var(--texto-cl);font-style:italic;font-size:.88rem;">Cargando…</p>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /admin-container -->
+  </div><!-- /adminPanel -->
+
+  <!-- ── Modal de confirmación ────────────────────────────── -->
+  <div class="modal-overlay hidden" id="modalConfirm">
+    <div class="modal-box">
+      <h3>¿Eliminar producto?</h3>
+      <p id="modalMsg">Esta acción no se puede deshacer.</p>
+      <div class="modal-acciones">
+        <button class="btn btn-secondary" id="btnModalCancelar" style="width:auto;">Cancelar</button>
+        <button class="btn btn-danger" id="btnModalConfirmar">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Toasts ────────────────────────────────────────────── -->
+  <div class="toast-container" id="toasts"></div>
+
+  <script>
+  (() => {
+    // ── Estado ─────────────────────────────────────────────
+    let productos = [];
+    let filtroActivo = 'todos';
+    let pendingDeleteId = null;
+    let imagenActualURL = ''; // imagen existente al editar
+
+    // ── Elementos del DOM ──────────────────────────────────
+    const loginOverlay   = document.getElementById('loginOverlay');
+    const adminPanel     = document.getElementById('adminPanel');
+    const inputPassword  = document.getElementById('inputPassword');
+    const btnLogin       = document.getElementById('btnLogin');
+    const loginError     = document.getElementById('loginError');
+    const btnLogout      = document.getElementById('btnLogout');
+
+    const formProducto      = document.getElementById('formProducto');
+    const formTitulo        = document.getElementById('formTitulo');
+    const productoId        = document.getElementById('productoId');
+    const inputNombre       = document.getElementById('inputNombre');
+    const inputCategoria    = document.getElementById('inputCategoria');
+    const inputDescripcion  = document.getElementById('inputDescripcion');
+    const inputPrecio       = document.getElementById('inputPrecio');
+    const inputImagen       = document.getElementById('inputImagen');
+    const imgPreviewWrap    = document.getElementById('imgPreviewWrap');
+    const imgPreviewTexto   = document.getElementById('imgPreviewTexto');
+    const formError         = document.getElementById('formError');
+    const btnGuardar        = document.getElementById('btnGuardar');
+    const btnCancelarEdicion= document.getElementById('btnCancelarEdicion');
+
+    const adminLista  = document.getElementById('adminLista');
+    const modalConfirm= document.getElementById('modalConfirm');
+    const modalMsg    = document.getElementById('modalMsg');
+    const btnModalCancelar  = document.getElementById('btnModalCancelar');
+    const btnModalConfirmar = document.getElementById('btnModalConfirmar');
+
+    // ══════════════════════════════════════════════════════
+    //  AUTENTICACIÓN
+    // ══════════════════════════════════════════════════════
+
+    async function checkSession() {
+      try {
+        const res = await fetch('/api/admin/check');
+        const data = await res.json();
+        if (data.loggedIn) mostrarPanel();
+      } catch {}
+    }
+
+    async function login() {
+      const pwd = inputPassword.value.trim();
+      if (!pwd) return;
+      btnLogin.disabled = true;
+      btnLogin.textContent = 'Ingresando…';
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwd })
+        });
+        if (res.ok) {
+          mostrarPanel();
+        } else {
+          loginError.classList.remove('hidden');
+          inputPassword.value = '';
+          inputPassword.focus();
+        }
+      } catch {
+        loginError.textContent = 'Error de conexión. Intentá de nuevo.';
+        loginError.classList.remove('hidden');
+      } finally {
+        btnLogin.disabled = false;
+        btnLogin.textContent = 'Ingresar';
+      }
+    }
+
+    async function logout() {
+      await fetch('/api/admin/logout', { method: 'POST' });
+      location.reload();
+    }
+
+    function mostrarPanel() {
+      loginOverlay.classList.add('hidden');
+      adminPanel.classList.remove('hidden');
+      cargarProductos();
+    }
+
+    btnLogin.addEventListener('click', login);
+    inputPassword.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+    btnLogout.addEventListener('click', logout);
+
+    // ══════════════════════════════════════════════════════
+    //  IMAGEN — preview
+    // ══════════════════════════════════════════════════════
+
+    imgPreviewWrap.addEventListener('click', () => inputImagen.click());
+
+    inputImagen.addEventListener('change', () => {
+      const file = inputImagen.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        imgPreviewWrap.innerHTML = `<img src="${e.target.result}" alt="Preview" />`;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // ══════════════════════════════════════════════════════
+    //  CARGAR PRODUCTOS
+    // ══════════════════════════════════════════════════════
+
+    async function cargarProductos() {
+      try {
+        const res = await fetch('/api/productos');
+        productos = await res.json();
+      } catch {
+        productos = [];
+        mostrarToast('Error al cargar productos', 'error');
+      }
+      renderLista();
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  RENDER LISTA
+    // ══════════════════════════════════════════════════════
+
+    const ICONOS_CAT = { almohadones:'🪡', caminos:'🌿', velas:'🕯', alhajeros:'💎' };
+    const LABELS_CAT = { almohadones:'Almohadones', caminos:'Caminos', velas:'Velas', alhajeros:'Alhajeros' };
+
+    function renderLista() {
+      const items = filtroActivo === 'todos'
+        ? productos
+        : productos.filter(p => p.categoria === filtroActivo);
+
+      if (items.length === 0) {
+        adminLista.innerHTML = `<p style="color:var(--texto-cl);font-style:italic;font-size:.88rem;">
+          No hay productos${filtroActivo !== 'todos' ? ' en esta categoría' : ''}. ¡Cargá el primero!
+        </p>`;
+        return;
+      }
+
+      adminLista.innerHTML = items.map(p => {
+        const imgHtml = p.imagen
+          ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" />`
+          : ICONOS_CAT[p.categoria] || '🌿';
+
+        const precio = p.precio > 0
+          ? `$${Number(p.precio).toLocaleString('es-AR')}`
+          : 'Consultá precio';
+
+        return `
+          <div class="admin-item" data-id="${p.id}">
+            <div class="admin-item-img">${imgHtml}</div>
+            <div class="admin-item-info">
+              <div class="admin-item-nombre">${esc(p.nombre)}</div>
+              <div class="admin-item-meta">
+                <span class="badge">${ICONOS_CAT[p.categoria]} ${LABELS_CAT[p.categoria]}</span>
+                ${precio}
+              </div>
+            </div>
+            <div class="admin-item-acciones">
+              <button class="btn btn-edit" onclick="editarProducto(${p.id})">✏ Editar</button>
+              <button class="btn btn-danger" onclick="confirmarEliminar(${p.id}, '${esc(p.nombre)}')">🗑</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // Filtros en admin
+    document.querySelectorAll('.admin-container .filtro-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.admin-container .filtro-btn').forEach(b => b.classList.remove('activo'));
+        btn.classList.add('activo');
+        filtroActivo = btn.dataset.cat;
+        renderLista();
+      });
+    });
+
+    // ══════════════════════════════════════════════════════
+    //  GUARDAR (crear o editar)
+    // ══════════════════════════════════════════════════════
+
+    formProducto.addEventListener('submit', async e => {
+      e.preventDefault();
+      formError.classList.add('hidden');
+
+      const nombre = inputNombre.value.trim();
+      const categoria = inputCategoria.value;
+      if (!nombre || !categoria) {
+        formError.textContent = 'Nombre y categoría son obligatorios.';
+        formError.classList.remove('hidden');
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('nombre', nombre);
+      fd.append('categoria', categoria);
+      fd.append('descripcion', inputDescripcion.value.trim());
+      fd.append('precio', inputPrecio.value || '0');
+      if (inputImagen.files[0]) fd.append('imagen', inputImagen.files[0]);
+
+      const id = productoId.value;
+      const url    = id ? `/api/admin/productos/${id}` : '/api/admin/productos';
+      const method = id ? 'PUT' : 'POST';
+
+      btnGuardar.disabled = true;
+      btnGuardar.textContent = 'Guardando…';
+
+      try {
+        const res = await fetch(url, { method, body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al guardar');
+        mostrarToast(id ? '✅ Producto actualizado' : '✅ Producto agregado');
+        resetForm();
+        await cargarProductos();
+      } catch (err) {
+        formError.textContent = err.message;
+        formError.classList.remove('hidden');
+      } finally {
+        btnGuardar.disabled = false;
+        btnGuardar.textContent = 'Guardar producto';
+      }
+    });
+
+    // ══════════════════════════════════════════════════════
+    //  EDITAR
+    // ══════════════════════════════════════════════════════
+
+    window.editarProducto = function(id) {
+      const p = productos.find(x => x.id === id);
+      if (!p) return;
+
+      productoId.value        = p.id;
+      inputNombre.value       = p.nombre;
+      inputCategoria.value    = p.categoria;
+      inputDescripcion.value  = p.descripcion;
+      inputPrecio.value       = p.precio;
+      imagenActualURL         = p.imagen;
+
+      // Preview imagen existente
+      if (p.imagen) {
+        imgPreviewWrap.innerHTML = `<img src="${esc(p.imagen)}" alt="Imagen actual" />`;
+      } else {
+        imgPreviewWrap.innerHTML = `<span id="imgPreviewTexto">📷 Hacé clic para subir foto</span>`;
+      }
+
+      formTitulo.textContent = '✏ Editando producto';
+      btnCancelarEdicion.classList.remove('hidden');
+      btnGuardar.textContent = 'Actualizar producto';
+      formProducto.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    btnCancelarEdicion.addEventListener('click', resetForm);
+
+    function resetForm() {
+      productoId.value = '';
+      formProducto.reset();
+      inputPrecio.value = '0';
+      imgPreviewWrap.innerHTML = `<span id="imgPreviewTexto">📷 Hacé clic para subir foto</span>`;
+      imagenActualURL = '';
+      formTitulo.textContent = '➕ Nuevo producto';
+      btnCancelarEdicion.classList.add('hidden');
+      btnGuardar.textContent = 'Guardar producto';
+      formError.classList.add('hidden');
+    }
+
+    // ══════════════════════════════════════════════════════
+    //  ELIMINAR
+    // ══════════════════════════════════════════════════════
+
+    window.confirmarEliminar = function(id, nombre) {
+      pendingDeleteId = id;
+      modalMsg.textContent = `¿Eliminás "${nombre}"? Esta acción no se puede deshacer.`;
+      modalConfirm.classList.remove('hidden');
+    };
+
+    btnModalCancelar.addEventListener('click', () => {
+      modalConfirm.classList.add('hidden');
+      pendingDeleteId = null;
+    });
+
+    btnModalConfirmar.addEventListener('click', async () => {
+      if (!pendingDeleteId) return;
+      modalConfirm.classList.add('hidden');
+      try {
+        const res = await fetch(`/api/admin/productos/${pendingDeleteId}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Error al eliminar');
+        mostrarToast('🗑 Producto eliminado');
+        if (productoId.value == pendingDeleteId) resetForm();
+        await cargarProductos();
+      } catch {
+        mostrarToast('No se pudo eliminar el producto', 'error');
+      }
+      pendingDeleteId = null;
+    });
+
+    // ══════════════════════════════════════════════════════
+    //  UTILIDADES
+    // ══════════════════════════════════════════════════════
+
+    function mostrarToast(msg, tipo = 'ok') {
+      const t = document.createElement('div');
+      t.className = `toast ${tipo}`;
+      t.textContent = msg;
+      document.getElementById('toasts').appendChild(t);
+      setTimeout(() => t.remove(), 3500);
+    }
+
+    function esc(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // ── Init ───────────────────────────────────────────────
+    checkSession();
+  })();
+  </script>
+</body>
+</html>

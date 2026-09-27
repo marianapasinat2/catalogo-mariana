@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mariana Pasinato — Artesanías</title>
+  <meta name="description" content="Catálogo de artesanías de Mariana Pasinato: almohadones, caminos, velas y alhajeros artesanales." />
+  <!-- Open Graph para redes sociales -->
+  <meta property="og:title" content="Mariana Pasinato — Artesanías" />
+  <meta property="og:description" content="Catálogo de artesanías: almohadones, caminos, velas y alhajeros hechos a mano." />
+  <meta property="og:type" content="website" />
+  <link rel="stylesheet" href="/css/catalogo.css" />
+</head>
+<body>
+
+  <!-- Link discreto al admin -->
+  <a class="admin-link" href="/admin">⚙ Administrar catálogo</a>
+
+  <!-- Header -->
+  <header class="header">
+    <span class="header-ornamento">✦ &nbsp; Hecho a mano &nbsp; ✦</span>
+    <h1>
+      Mariana Pasinato
+      <span>Artesanías</span>
+    </h1>
+    <p>Piezas únicas con alma rústica, hechas con amor y dedicación</p>
+  </header>
+
+  <!-- Separador -->
+  <div class="separador">― &nbsp; ✦ &nbsp; ―</div>
+
+  <!-- Filtros -->
+  <nav class="filtros-wrap" role="navigation" aria-label="Filtrar por categoría">
+    <div class="filtros">
+      <button class="filtro-btn activo" data-cat="todos">Todos</button>
+      <button class="filtro-btn" data-cat="almohadones">🪡 Almohadones</button>
+      <button class="filtro-btn" data-cat="caminos">🌿 Caminos</button>
+      <button class="filtro-btn" data-cat="velas">🕯 Velas</button>
+      <button class="filtro-btn" data-cat="alhajeros">💎 Alhajeros</button>
+    </div>
+  </nav>
+
+  <!-- Contenido principal -->
+  <main id="main-content">
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Cargando catálogo…</p>
+    </div>
+    <div id="catalogo"></div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>© 2024 Mariana Pasinato — Artesanías &nbsp;|&nbsp; Hecho con ❤️ a mano</p>
+  </footer>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toasts"></div>
+
+  <script>
+  (() => {
+    // ── Configuración de categorías ─────────────────────────
+    const CATEGORIAS = [
+      { id: 'almohadones', label: 'Almohadones', icono: '🪡' },
+      { id: 'caminos',     label: 'Caminos',     icono: '🌿' },
+      { id: 'velas',       label: 'Velas',       icono: '🕯' },
+      { id: 'alhajeros',   label: 'Alhajeros',   icono: '💎' },
+    ];
+
+    let todosLosProductos = [];
+    let categoriaActiva = 'todos';
+
+    // ── Carga inicial ──────────────────────────────────────
+    async function cargarProductos() {
+      try {
+        const res = await fetch('/api/productos');
+        if (!res.ok) throw new Error('Error al cargar productos');
+        todosLosProductos = await res.json();
+      } catch (err) {
+        todosLosProductos = [];
+        mostrarToast('No se pudo cargar el catálogo', 'error');
+      }
+      renderCatalogo();
+    }
+
+    // ── Render ─────────────────────────────────────────────
+    function renderCatalogo() {
+      const loading = document.getElementById('loading');
+      const catalogo = document.getElementById('catalogo');
+      loading.classList.add('hidden');
+
+      // Filtrar
+      const productos = categoriaActiva === 'todos'
+        ? todosLosProductos
+        : todosLosProductos.filter(p => p.categoria === categoriaActiva);
+
+      if (productos.length === 0) {
+        catalogo.innerHTML = `
+          <div class="seccion">
+            <div class="vacio">
+              <div class="vacio-icono">🌾</div>
+              <p>No hay productos en esta categoría por el momento.</p>
+            </div>
+          </div>`;
+        return;
+      }
+
+      // Agrupar por categoría
+      const categoriasAMostrar = categoriaActiva === 'todos'
+        ? CATEGORIAS
+        : CATEGORIAS.filter(c => c.id === categoriaActiva);
+
+      let html = '';
+      for (const cat of categoriasAMostrar) {
+        const items = productos.filter(p => p.categoria === cat.id);
+        if (items.length === 0) continue;
+
+        html += `
+          <section class="seccion">
+            <h2 class="seccion-titulo">
+              <span class="icono">${cat.icono}</span>
+              ${cat.label}
+            </h2>
+            <div class="grid">
+              ${items.map(renderCard).join('')}
+            </div>
+          </section>`;
+      }
+
+      catalogo.innerHTML = html;
+    }
+
+    function renderCard(p) {
+      const imgHtml = p.imagen
+        ? `<img src="${escapeHtml(p.imagen)}" alt="${escapeHtml(p.nombre)}" loading="lazy" />`
+        : `<span class="card-img-placeholder">🌿</span>`;
+
+      const precio = p.precio > 0
+        ? `<span class="card-precio">$${Number(p.precio).toLocaleString('es-AR')}</span>`
+        : `<span class="card-precio" style="font-style:italic;font-size:.9rem;color:var(--marron-cl)">Consultá precio</span>`;
+
+      return `
+        <article class="card">
+          <div class="card-img-wrap">${imgHtml}</div>
+          <div class="card-body">
+            <h3 class="card-nombre">${escapeHtml(p.nombre)}</h3>
+            <p class="card-descripcion">${escapeHtml(p.descripcion)}</p>
+            ${precio}
+          </div>
+        </article>`;
+    }
+
+    // ── Filtros ────────────────────────────────────────────
+    document.querySelectorAll('.filtro-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('activo'));
+        btn.classList.add('activo');
+        categoriaActiva = btn.dataset.cat;
+        renderCatalogo();
+      });
+    });
+
+    // ── Toast ──────────────────────────────────────────────
+    function mostrarToast(msg, tipo = 'ok') {
+      const t = document.createElement('div');
+      t.className = `toast ${tipo}`;
+      t.textContent = msg;
+      document.getElementById('toasts').appendChild(t);
+      setTimeout(() => t.remove(), 3500);
+    }
+
+    // ── Utilidades ─────────────────────────────────────────
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // ── Init ───────────────────────────────────────────────
+    cargarProductos();
+  })();
+  </script>
+</body>
+</html>
