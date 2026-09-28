@@ -1,64 +1,78 @@
-const fs   = require('fs');
-const path = require('path');
+const { MongoClient, ObjectId } = require('mongodb');
 
-const DB_PATH = path.join(__dirname, 'catalogo.json');
+const MONGODB_URI = process.env.MONGODB_URI || '';
+const DB_NAME     = 'catalogo_mariana';
 
-// ── Inicializar archivo si no existe ──────────────────────
-function getDb() {
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ productos: [], nextId: 1 }, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+let _db = null;
+
+async function connect() {
+  if (_db) return _db;
+  if (!MONGODB_URI) throw new Error('Falta la variable de entorno MONGODB_URI');
+  const client = new MongoClient(MONGODB_URI);
+  await client.connect();
+  _db = client.db(DB_NAME);
+  console.log('✅ Conectado a MongoDB Atlas');
+  return _db;
 }
 
-function saveDb(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+function col() {
+  return connect().then(db => db.collection('productos'));
 }
 
 // ── CRUD ───────────────────────────────────────────────────
 
-function getAllProductos() {
-  const db = getDb();
-  return db.productos.sort((a, b) =>
-    a.categoria.localeCompare(b.categoria) || a.nombre.localeCompare(b.nombre)
-  );
+async function getAllProductos() {
+  const c = await col();
+  const docs = await c.find({}).sort({ categoria: 1, nombre: 1 }).toArray();
+  return docs.map(formatDoc);
 }
 
-function getProductosByCategoria(categoria) {
-  return getAllProductos().filter(p => p.categoria === categoria);
+async function getProductosByCategoria(categoria) {
+  const c = await col();
+  const docs = await c.find({ categoria }).sort({ nombre: 1 }).toArray();
+  return docs.map(formatDoc);
 }
 
-function getProductoById(id) {
-  return getDb().productos.find(p => p.id === id) || null;
+async function getProductoById(id) {
+  try {
+    const c = await col();
+    const doc = await c.findOne({ _id: new ObjectId(id) });
+    return doc ? formatDoc(doc) : null;
+  } catch {
+    return null;
+  }
 }
 
-function createProducto({ nombre, descripcion, precio, categoria, imagen }) {
-  const db = getDb();
-  const producto = {
-    id: db.nextId++,
+async function createProducto({ nombre, descripcion, precio, categoria, imagen }) {
+  const c = await col();
+  const result = await c.insertOne({
     nombre,
     descripcion: descripcion || '',
     precio: parseFloat(precio) || 0,
     categoria,
-    imagen: imagen || ''
-  };
-  db.productos.push(producto);
-  saveDb(db);
-  return producto.id;
+    imagen: imagen || '',
+    creadoEn: new Date()
+  });
+  return result.insertedId.toString();
 }
 
-function updateProducto(id, { nombre, descripcion, precio, categoria, imagen }) {
-  const db = getDb();
-  const idx = db.productos.findIndex(p => p.id === id);
-  if (idx === -1) return;
-  db.productos[idx] = { ...db.productos[idx], nombre, descripcion, precio, categoria, imagen };
-  saveDb(db);
+async function updateProducto(id, { nombre, descripcion, precio, categoria, imagen }) {
+  const c = await col();
+  await c.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { nombre, descripcion, precio: parseFloat(precio) || 0, categoria, imagen } }
+  );
 }
 
-function deleteProducto(id) {
-  const db = getDb();
-  db.productos = db.productos.filter(p => p.id !== id);
-  saveDb(db);
+async function deleteProducto(id) {
+  const c = await col();
+  await c.deleteOne({ _id: new ObjectId(id) });
+}
+
+// Convierte _id de Mongo a id simple para el frontend
+function formatDoc(doc) {
+  const { _id, ...rest } = doc;
+  return { id: _id.toString(), ...rest };
 }
 
 module.exports = {
