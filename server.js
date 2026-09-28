@@ -63,12 +63,12 @@ function requireAuth(req, res, next) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // Todos los productos (o filtrado por ?categoria=)
-app.get('/api/productos', (req, res) => {
+app.get('/api/productos', async (req, res) => {
   try {
     const { categoria } = req.query;
     const productos = categoria
-      ? db.getProductosByCategoria(categoria)
-      : db.getAllProductos();
+      ? await db.getProductosByCategoria(categoria)
+      : await db.getAllProductos();
     res.json(productos);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -103,14 +103,14 @@ app.get('/api/admin/check', (req, res) => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // Crear producto
-app.post('/api/admin/productos', requireAuth, upload.single('imagen'), (req, res) => {
+app.post('/api/admin/productos', requireAuth, upload.single('imagen'), async (req, res) => {
   try {
     const { nombre, descripcion, precio, categoria } = req.body;
     if (!nombre || !categoria) {
       return res.status(400).json({ error: 'Nombre y categoría son obligatorios' });
     }
     const imagen = req.file ? `/uploads/${req.file.filename}` : '';
-    const id = db.createProducto({
+    const id = await db.createProducto({
       nombre: nombre.trim(),
       descripcion: (descripcion || '').trim(),
       precio: parseFloat(precio) || 0,
@@ -124,17 +124,16 @@ app.post('/api/admin/productos', requireAuth, upload.single('imagen'), (req, res
 });
 
 // Editar producto
-app.put('/api/admin/productos/:id', requireAuth, upload.single('imagen'), (req, res) => {
+app.put('/api/admin/productos/:id', requireAuth, upload.single('imagen'), async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const existente = db.getProductoById(id);
+    const { id } = req.params;
+    const existente = await db.getProductoById(id);
     if (!existente) return res.status(404).json({ error: 'Producto no encontrado' });
 
     const { nombre, descripcion, precio, categoria } = req.body;
-    // Si se sube nueva imagen, usarla; si no, conservar la anterior
     const imagen = req.file ? `/uploads/${req.file.filename}` : existente.imagen;
 
-    db.updateProducto(id, {
+    await db.updateProducto(id, {
       nombre: (nombre || existente.nombre).trim(),
       descripcion: descripcion !== undefined ? descripcion.trim() : existente.descripcion,
       precio: precio !== undefined ? parseFloat(precio) : existente.precio,
@@ -148,10 +147,10 @@ app.put('/api/admin/productos/:id', requireAuth, upload.single('imagen'), (req, 
 });
 
 // Eliminar producto
-app.delete('/api/admin/productos/:id', requireAuth, (req, res) => {
+app.delete('/api/admin/productos/:id', requireAuth, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const existente = db.getProductoById(id);
+    const { id } = req.params;
+    const existente = await db.getProductoById(id);
     if (!existente) return res.status(404).json({ error: 'Producto no encontrado' });
 
     // Eliminar imagen del disco si existe
@@ -160,7 +159,7 @@ app.delete('/api/admin/productos/:id', requireAuth, (req, res) => {
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
-    db.deleteProducto(id);
+    await db.deleteProducto(id);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
